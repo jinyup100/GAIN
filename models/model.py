@@ -78,7 +78,7 @@ class GAIN(pl.LightningModule):
         mse_loss = nn.MSELoss(reduction="mean")
 
         generator_sample = self.generator(x, mask)
-        x_hat = x + generator_sample * (1 - mask)
+        x_hat = x*mask + generator_sample * (1 - mask)
         discriminator_prob = self.discriminator(x_hat, hint)
 
         # G_CE_loss = -torch.mean((1-mask) * torch.log(discriminator_prob + 1e-8))
@@ -93,7 +93,7 @@ class GAIN(pl.LightningModule):
         bce_loss = nn.BCELoss(reduction="mean")
 
         generator_sample = self.generator(x, mask)
-        x_hat = x + generator_sample * (1 - mask)
+        x_hat = x*mask + generator_sample * (1 - mask)
         discriminator_prob = self.discriminator(x_hat.detach(), hint)
         # D_total_loss = -torch.mean(mask * torch.log(discriminator_prob + 1e-8) + (1-mask) * torch.log(1. - discriminator_prob + 1e-8))
         D_total_loss = bce_loss(discriminator_prob, mask)
@@ -108,10 +108,6 @@ class GAIN(pl.LightningModule):
         if optimizer_idx == 0:
             g_loss = self._generator_step(x, mask, hint)
             self.log('g_loss', g_loss, prog_bar=True, logger=True, on_step=True)
-            #qdm_dict = {'g_loss': g_loss}
-            #output = OrderedDict({'loss': g_loss,
-            #                      'progress_bar': tqdm_dict,
-            #                      'log': tqdm_dict})
             g_opt.zero_grad()
             g_loss.backward()
             g_opt.step()
@@ -121,10 +117,6 @@ class GAIN(pl.LightningModule):
         if optimizer_idx == 1:
             d_loss = self._discriminator_step(x, mask, hint)
             self.log('d_loss', d_loss, prog_bar=True, logger=True, on_step=True)
-            #tqdm_dict = {'d_loss': d_loss}
-            #output = OrderedDict({'loss': d_loss,
-            #                      'progress_bar': tqdm_dict,
-            #                      'log': tqdm_dict})
             d_loss.backward()
             d_opt.step()
             d_opt.zero_grad()
