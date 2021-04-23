@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
+from collections import OrderedDict
+
 
 class Generator(pl.LightningModule):
     def __init__(self, number_of_features, hidden_state_features):
@@ -104,22 +106,30 @@ class GAIN(pl.LightningModule):
 
         # Train Generator
         if optimizer_idx == 0:
-            loss = self._generator_step(x, mask, hint)
-            self.log('g_loss', loss, prog_bar=True, logger=True, on_step=True)
-
-            loss.backward()
-            g_opt.step()
+            g_loss = self._generator_step(x, mask, hint)
+            self.log('g_loss', g_loss, prog_bar=True, logger=True, on_step=True)
+            #qdm_dict = {'g_loss': g_loss}
+            #output = OrderedDict({'loss': g_loss,
+            #                      'progress_bar': tqdm_dict,
+            #                      'log': tqdm_dict})
             g_opt.zero_grad()
+            g_loss.backward()
+            g_opt.step()
+            loss = g_loss
+            return loss
 
         if optimizer_idx == 1:
-            loss = self._discriminator_step(x, mask, hint)
-            self.log('d_loss', loss, prog_bar=True, logger=True, on_step=True)
-
-            loss.backward()
+            d_loss = self._discriminator_step(x, mask, hint)
+            self.log('d_loss', d_loss, prog_bar=True, logger=True, on_step=True)
+            #tqdm_dict = {'d_loss': d_loss}
+            #output = OrderedDict({'loss': d_loss,
+            #                      'progress_bar': tqdm_dict,
+            #                      'log': tqdm_dict})
+            d_loss.backward()
             d_opt.step()
             d_opt.zero_grad()
-
-        return loss
+            loss = d_loss
+            return loss
 
     def configure_optimizers(self):
         g_opt = torch.optim.Adam(self.generator.parameters(), lr=self.lr)

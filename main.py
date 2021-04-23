@@ -9,44 +9,53 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from pathlib import Path
 
-from data.mnist_data import MaskedMNIST, BlockMaskedMNIST
+from data.mnist_data import TrainMaskedMNIST, TrainBlockMaskedMNIST, TestMaskedMNIST, TestBlockMaskedMNIST
 from data.dataset_loader import CustomDataset
 from models.model import GAIN
 
 
 def main():
     # 1. Load Training Data
-    train_data = BlockMaskedMNIST(block_len=7)
+    train_data = TrainBlockMaskedMNIST(block_len=7)
+    test_data = TestBlockMaskedMNIST(block_len=7)
 
-    image_data = []
-    mask_data = []
+    train_image_data = []
+    train_mask_data = []
+    test_image_data = []
+    test_mask_data = []
 
     for i in range(len(train_data)):
-        image_data.append(train_data[i][0].squeeze())
-        mask_data.append(train_data[i][1])
+        train_image_data.append(train_data[i][0].squeeze().detach().numpy())
+        single_train_mask_data = 1 - train_data[i][1].detach().numpy()
+        train_mask_data.append(single_train_mask_data)
 
-    for i in range(len(image_data)):
-        image_data[i][mask_data[i]] = 0
+    for i in range(len(test_data)):
+        test_image_data.append(test_data[i][0].squeeze().detach().numpy())
+        single_test_mask_data = test_data[i][1].detach().numpy()
+        test_mask_data.append(single_test_mask_data)
 
-    for i in range(len(mask_data)):
-        mask_data[i] = 1 - mask_data[i]
+    batch_size = 120
+    feature_num = 28
+    hidden_feature_num = int(feature_num)
+    alpha = 100
+    hint_rate = 0.9
+    miss_rate = 0.2
 
-    MNIST_train_dataset = CustomDataset(image_data, mask_data, 28, batch_size=3, hint_rate=0.9)
-    train_dataloader = DataLoader(MNIST_train_dataset, batch_size=3, shuffle=True)
+    MNIST_train_dataset = CustomDataset(train_image_data, train_mask_data, feature_num, batch_size, hint_rate, miss_rate)
+    MNIST_test_dataset = CustomDataset(test_image_data, test_mask_data, feature_num, batch_size, hint_rate, miss_rate)
+    train_dataloader = DataLoader(MNIST_train_dataset, batch_size, shuffle=True)
+    test_dataloader = DataLoader(MNIST_test_dataset, batch_size, shuffle=True)
 
     x, m, h = MNIST_train_dataset[0]
-    """
     plt.subplot(1, 3, 1)
-    plt.imshow(x.cpu().numpy(), cmap='gray')
+    plt.imshow(x.flatten().reshape(feature_num, feature_num).cpu().numpy(), cmap='gray')
     plt.subplot(1, 3, 2)
-    plt.imshow(m.cpu().numpy(), cmap='gray')
+    plt.imshow(m.flatten().reshape(feature_num, feature_num).cpu().numpy(), cmap='gray')
     plt.subplot(1, 3, 3)
-    plt.imshow(h, cmap='gray')
+    plt.imshow(h.flatten().reshape(feature_num, feature_num).cpu().numpy(), cmap='gray')
     plt.show()
-    """
 
     # 2. Checkpoint and Logger
-
     checkpoint_path = Path(f'./output')
     checkpoint_path.mkdir(parents=True, exist_ok=True)
     checkpoint_callback = ModelCheckpoint(dirpath=str(checkpoint_path),
@@ -62,11 +71,6 @@ def main():
                                             mode='min')
 
     # 3. Load Model
-    batch_size = 3
-    feature_num = 28
-    hidden_feature_num = int(feature_num)
-    alpha = 500
-    hint_rate = 0.9
     model = GAIN(batch_size, feature_num, hidden_feature_num, alpha, hint_rate)
 
     # 4. Trainer
@@ -78,6 +82,7 @@ def main():
                          gpus=1,
                          logger=logger,
                          max_epochs=1000,
+                         progress_bar_refresh_rate=1
                          )
 
     # 5. Start Training
